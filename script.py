@@ -24,13 +24,17 @@ app = Client("cf_uploader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_
 async def main():
     async with app:
         print("[INFO] Bot client connected successfully.")
-        
         file_path = "downloaded_resource.zip"
         
         try:
             print(f"[INFO] Visiting Website URL: {TARGET_URL}")
             r = requests.get(TARGET_URL, impersonate="chrome", stream=True, timeout=90)
             print(f"[INFO] HTTP Response Status Code: {r.status_code}")
+            
+            if r.status_code == 404:
+                await app.send_message(CHANNEL_ID, f"❌ **Error 404:** আপনার দেওয়া লিঙ্কটি ভুল বা ডেড!\nURL: {TARGET_URL}")
+                return
+                
             r.raise_for_status()
             
             print("[SUCCESS] Cloudflare bypassed! Extracting cookies...")
@@ -66,6 +70,7 @@ async def main():
             
         except Exception as e:
             print(f"[CRITICAL ERROR] Python process crashed: {str(e)}")
+            await app.send_message(CHANNEL_ID, f"❌ **Python Script Crashed:**\n`{str(e)}`")
             raise e
             
         finally:
