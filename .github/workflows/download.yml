@@ -26,6 +26,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyrogram tgcrypto curl_cffi yt-dlp
 
+    # পাইথনের নিজের কনসোল আউটপুট সরাসরি টার্মিনাল লগে পুশ করা হচ্ছে
     - name: Run Downloader Script
       id: run_script
       env:
@@ -34,30 +35,32 @@ jobs:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         TARGET_URL: ${{ github.event.inputs.target_url }}
-      run: python script.py
+      run: |
+        python script.py 2>&1 | tee github_system.log
 
-    # কোড ফেইল বা সাকসেস যা-ই হোক না কেন, এই স্টেপটি সবসময় রান হবে এবং পুরো লগ ফাইল টেলিগ্রামে পাঠাবে
-    - name: Upload Full Workflow Log to Telegram (Always Runs)
+    # এই স্টেপটি সবসময় রান হবে (স্ক্রিপ্ট সাকসেস হোক বা এরর খাক)
+    - name: Upload Complete Workflow Log to Telegram (Always Runs)
       if: always()
       run: |
-        # গিটহাবের ইন্টারনাল লগ কালেক্ট করা
-        sudo apt-get install -y jq
+        # একটি মাস্টার লগ ফাইল তৈরি করা
+        echo "=== GITHUB WORKFLOW SYSTEM LOG ===" > workflow_final_log.txt
+        echo "Target URL: ${{ github.event.inputs.target_url }}" >> workflow_final_log.txt
+        echo "Execution Status: ${{ steps.run_script.outcome }}" >> workflow_final_log.txt
+        echo "Timestamp: $(date)" >> workflow_final_log.txt
+        echo "======================================" >> workflow_final_log.txt
         
-        # লগের জন্য একটি ফাইল তৈরি করা
-        echo "=== GITHUB WORKFLOW LOG ===" > workflow_log.txt
-        echo "URL Checked: ${{ github.event.inputs.target_url }}" >> workflow_log.txt
-        echo "Status of Script: ${{ steps.run_script.outcome }}" >> workflow_log.txt
-        echo "=============================" >> workflow_log.txt
-        
-        # স্ক্রিপ্ট এরর দিলে বা সাকসেস হলে তার লাস্ট টার্মিনাল আউটপুট ফাইলে নেওয়া
-        if [ -f script_output.log ]; then
-          cat script_output.log >> workflow_log.txt
+        # পাইথন বা গিটহাবের রিয়েল-টাইম টার্মিনাল লগ যদি থাকে, তা এই ফাইলে ঢুকবে
+        if [ -f github_system.log ]; then
+          cat github_system.log >> workflow_final_log.txt
         else
-          echo "No script_output.log found. Script crashed early." >> workflow_log.txt
+          echo "[CRITICAL] Script crashed before generating any console output." >> workflow_final_log.txt
         fi
+        
+        # সেফটি চেক: ফাইল কোনো কারণে খালি থাকলেও যেন curl ক্র্যাশ না করে
+        echo "=== END OF LOG ===" >> workflow_final_log.txt
 
-        # টেলিগ্রাম বট API দিয়ে সরাসরি .txt ফাইলটি চ্যানেলে পুশ করা (কোনো পাইগ্রাম কোডের ওপর নির্ভর না করে)
-        curl -F chat_id="${{ secrets.CHANNEL_ID }}" \
-             -F document=@"workflow_log.txt" \
-             -F caption="📋 Full Workflow Log File (Status: ${{ steps.run_script.outcome }})" \
-             https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument
+        # সরাসরি টেলিগ্রাম বট API দিয়ে .txt ফাইলটি চ্যানেলে পুশ করা
+        curl -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument" \
+             -F chat_id="${{ secrets.CHANNEL_ID }}" \
+             -F document=@"workflow_final_log.txt" \
+             -F caption="📋 GitHub Workflow Log (Status: ${{ steps.run_script.outcome }})"
