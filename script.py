@@ -5,10 +5,8 @@ import json
 from curl_cffi import requests
 from pyrogram import Client
 
-# সব আউটপুট ফাইলে সেভ করার জন্য সিস্টেম (গিটহাব এরর ট্র্যাকিং)
-log_file = open("script_output.log", "w", encoding="utf-8")
-sys.stdout = log_file
-sys.stderr = log_file
+print("=== START OF PYTHON SCRIPT ===")
+print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
 API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
@@ -25,21 +23,20 @@ app = Client("cf_uploader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_
 
 async def main():
     async with app:
-        print("[INFO] Bot session started in GitHub Runner.")
-        print(f"[INFO] Visiting URL: {TARGET_URL}")
+        print("[INFO] Bot client connected successfully.")
         
         file_path = "downloaded_resource.zip"
         
         try:
-            # ক্লাউডফ্লেয়ার বাইপাস ট্রাই করা
+            print(f"[INFO] Visiting Website URL: {TARGET_URL}")
             r = requests.get(TARGET_URL, impersonate="chrome", stream=True, timeout=90)
+            print(f"[INFO] HTTP Response Status Code: {r.status_code}")
             r.raise_for_status()
             
-            print("[SUCCESS] Cloudflare bypass achieved. Extracting cookies...")
+            print("[SUCCESS] Cloudflare bypassed! Extracting cookies...")
             cookies = r.cookies.get_dict()
             user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             
-            # কুকি সংরক্ষণ
             cookie_file = "cookies.json"
             with open(cookie_file, "w") as f:
                 json.dump({"cookies": cookies, "user_agent": user_agent}, f, indent=4)
@@ -52,32 +49,29 @@ async def main():
             downloaded = 0
             
             with open(file_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=1048576): # ফাস্টার রাইটিংয়ের জন্য ১ মেগাবাইট চাঙ্ক
+                for chunk in r.iter_content(chunk_size=1048576):
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
                         if total_size:
                             print(f"[DOWNLOAD] Progress: {round(downloaded * 100 / total_size, 2)}% ({downloaded}/{total_size} bytes)")
             
-            print("[SUCCESS] Download completed. Uploading file to Telegram...")
+            print("[SUCCESS] Download finished. Uploading asset to Telegram channel...")
             await app.send_document(
                 chat_id=CHANNEL_ID,
                 document=file_path,
                 caption=f"✅ Download & Upload Successful!\nSource: {TARGET_URL}"
             )
-            print("[SUCCESS] File successfully sent to telegram.")
+            print("[SUCCESS] Process successfully completed!")
             
         except Exception as e:
-            print(f"[CRITICAL ERROR] Script crashed during process: {str(e)}")
-            raise e # ওয়ার্কফ্লোকে এরর স্টেট জানানোর জন্য
+            print(f"[CRITICAL ERROR] Python process crashed: {str(e)}")
+            raise e
             
         finally:
             if os.path.exists(file_path): os.remove(file_path)
             if os.path.exists("cookies.json"): os.remove("cookies.json")
-            print("[INFO] Cleanup finished.")
+            print("=== END OF PYTHON SCRIPT ===")
 
 if __name__ == "__main__":
-    try:
-        app.run(main())
-    finally:
-        log_file.close()
+    app.run(main())
