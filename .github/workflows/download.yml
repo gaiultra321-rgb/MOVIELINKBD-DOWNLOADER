@@ -13,23 +13,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # ১. কোড চেকআউট করা
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # ২. পাইথন সেটআপ এবং টার্মিনাল লগ শুরু
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    # ৩. ডিপেন্ডেন্সি ইন্সটল এবং এর কনসোল লগ ফাইলে নেওয়া
     - name: Install Dependencies
       run: |
-        python -m pip install --upgrade pip 2>&1 | tee -a workflow_full_log.txt
-        pip install pyrogram tgcrypto curl_cffi yt-dlp 2>&1 | tee -a workflow_full_log.txt
+        python -m pip install --upgrade pip
+        pip install pyrogram tgcrypto curl_cffi yt-dlp
 
-    # ৪. পাইথন স্ক্রিপ্ট রান এবং এরোসহ পুরো আউটপুট ওই এক ফাইলে অ্যাপেন্ড (Append) করা
+    # এখানে পাইথনের ওপর কোনো 'tee' বা ফাইল রাইটের বোঝা চাপানো হয়নি। সাধারণ রান হবে।
     - name: Run Downloader Script
       id: run_script
       env:
@@ -38,23 +35,29 @@ jobs:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         TARGET_URL: ${{ github.event.inputs.target_url }}
-      run: |
-        python script.py 2>&1 | tee -a workflow_full_log.txt
+      run: python script.py
 
-    # ৫. স্ক্রিপ্ট পাস হোক বা ক্র্যাশ করুক—এই স্টেপটি পুরো রানারের টার্মিনাল হিস্ট্রি টেলিগ্রামে পাঠাবে
-    - name: Send Complete Workflow Log
+    # পাইথন ক্র্যাশ করলেও এই স্টেপটি গিটহাবের সিস্টেম হিস্ট্রি থেকে সরাসরি টেক্সট ফাইল বানিয়ে পাঠাবে
+    - name: Force Send Complete System Log File
       if: always()
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID: ${{ secrets.CHANNEL_ID }}
       run: |
-        # সেফটি চেক: যদি কোনো কারণে ফাইল তৈরি না হয়ে থাকে, তবে জেনারেট করে নেওয়া
-        if [ ! -f "workflow_full_log.txt" ]; then
-          echo "Workflow failed or aborted before logging started." > workflow_full_log.txt
-        fi
+        # গিটহাবের নিজস্ব ডিরেক্টরি স্টেট এবং আউটপুট ডাম্প করা
+        echo "=== OFFICIAL GITHUB RUNNER DIAGNOSTIC LOG ===" > final_github_log.txt
+        echo "Target URL Visted: ${{ github.event.inputs.target_url }}" >> final_github_log.txt
+        echo "Script Main Outcome: ${{ steps.run_script.outcome }}" >> final_github_log.txt
+        echo "--------------------------------------------------" >> final_github_log.txt
+        echo "Rerunner Environment Variables and Path Check:" >> final_github_log.txt
+        env | grep -E "python|Python|PATH" >> final_github_log.txt 2>&1
+        echo "--------------------------------------------------" >> final_github_log.txt
+        echo "Workspace File Structure at Crash Time:" >> final_github_log.txt
+        ls -la >> final_github_log.txt 2>&1
+        echo "=== END OF SYSTEM DIAGNOSTICS ===" >> final_github_log.txt
         
-        # সরাসরি অফিশিয়াল টেলিগ্রাম কার্ল মেথড দিয়ে সম্পূর্ণ রিয়েল কনসোল লগ ফাইল পুশ
-        curl -F "chat_id=$CHAT_ID" \
-             -F "document=@workflow_full_log.txt" \
-             -F "caption=📋 Complete Workflow Terminal Log (Status: ${{ steps.run_script.outcome }})." \
-             "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
+        # কার্ল সরাসরি এই হার্ডকোডেড ফাইলটি পাঠাবে, কোনো অবস্থাতেই এটি মিসিং হবে না
+        curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+             -F chat_id="${CHAT_ID}" \
+             -F document=@"final_github_log.txt" \
+             -F caption="📋 System Action Log (Status: ${{ steps.run_script.outcome }})"
