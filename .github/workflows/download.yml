@@ -26,7 +26,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyrogram tgcrypto curl_cffi yt-dlp
 
-    # পাইথনের নিজের কনসোল আউটপুট সরাসরি টার্মিনাল লগে পুশ করা হচ্ছে
     - name: Run Downloader Script
       id: run_script
       env:
@@ -35,32 +34,27 @@ jobs:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         TARGET_URL: ${{ github.event.inputs.target_url }}
+      # Shuru theke shesh porjonto shob terminal output workflow_log.txt e save hobe
       run: |
-        python script.py 2>&1 | tee github_system.log
+        python script.py 2>&1 | tee workflow_log.txt
 
-    # এই স্টেপটি সবসময় রান হবে (স্ক্রিপ্ট সাকসেস হোক বা এরর খাক)
-    - name: Upload Complete Workflow Log to Telegram (Always Runs)
+    - name: Send Build Log
       if: always()
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHAT_ID: ${{ secrets.CHANNEL_ID }}
       run: |
-        # একটি মাস্টার লগ ফাইল তৈরি করা
-        echo "=== GITHUB WORKFLOW SYSTEM LOG ===" > workflow_final_log.txt
-        echo "Target URL: ${{ github.event.inputs.target_url }}" >> workflow_final_log.txt
-        echo "Execution Status: ${{ steps.run_script.outcome }}" >> workflow_final_log.txt
-        echo "Timestamp: $(date)" >> workflow_final_log.txt
-        echo "======================================" >> workflow_final_log.txt
-        
-        # পাইথন বা গিটহাবের রিয়েল-টাইম টার্মিনাল লগ যদি থাকে, তা এই ফাইলে ঢুকবে
-        if [ -f github_system.log ]; then
-          cat github_system.log >> workflow_final_log.txt
+        # Apnar dewa oii exact script logic ekhane fix kora holo
+        if [ -f "workflow_log.txt" ]; then LOG_FILE="workflow_log.txt";
+        elif [ -f "NativeApp/build_log.txt" ]; then LOG_FILE="NativeApp/build_log.txt";
+        elif [ -f "build_log.txt" ]; then LOG_FILE="build_log.txt";
+        elif [ -f "error_log.txt" ]; then LOG_FILE="error_log.txt";
         else
-          echo "[CRITICAL] Script crashed before generating any console output." >> workflow_final_log.txt
+           echo "Build processing completed/failed before logging started." > fallback_log.txt
+           LOG_FILE="fallback_log.txt"
         fi
         
-        # সেফটি চেক: ফাইল কোনো কারণে খালি থাকলেও যেন curl ক্র্যাশ না করে
-        echo "=== END OF LOG ===" >> workflow_final_log.txt
-
-        # সরাসরি টেলিগ্রাম বট API দিয়ে .txt ফাইলটি চ্যানেলে পুশ করা
-        curl -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument" \
-             -F chat_id="${{ secrets.CHANNEL_ID }}" \
-             -F document=@"workflow_final_log.txt" \
-             -F caption="📋 GitHub Workflow Log (Status: ${{ steps.run_script.outcome }})"
+        curl -F "chat_id=$CHAT_ID" \
+             -F "document=@$LOG_FILE" \
+             -F "caption=Here is your complete Workflow Log (Success/Failure)." \
+             "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
