@@ -35,7 +35,7 @@ jobs:
           ghcr.io/flaresolverr/flaresolverr:latest
         
         # FlareSolverr চালু হওয়ার জন্য ৫ সেকেন্ড অপেক্ষা করা
-        sleep 5 
+        sleep 20 
 
     - name: Run Downloader Script
       env:
